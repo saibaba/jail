@@ -1,8 +1,8 @@
 require 'fileutils'
 require 'socket'
 
-require './syscall'
 require './continst'
+require './logging'
 
 CLONE_NO=56
 UNSHARE_NO = 272
@@ -13,6 +13,8 @@ def unshare
 end
 
 class ContainerManager
+  include Logging
+
   attr_accessor :host_ip, :container_ip, :tenant_id, :base, :command_port
   
   def initialize
@@ -67,16 +69,16 @@ class ContainerManager
         require './continst'
         inst_main(@tenant_id)
       }
-      puts "Init waiting for init-runner to finish...."
+      logger.debug "Init waiting for init-runner to finish...."
       Process.waitpid(initrc_pid)
     }
 
-    puts "Waiting for unsharing by child..."
+    logger.debug "Waiting for unsharing by child..."
     sleep 1 
     wait_for_child
 
-    puts "Moving link to init (with pid: #{@init_pid}) with below command ..."
-    puts "ip link set #{@link_cont_name} netns #{@init_pid}"
+    logger.debug "Moving link to init (with pid: #{@init_pid}) with below command ..."
+    logger.debug "ip link set #{@link_cont_name} netns #{@init_pid}"
 
     `ip link set #{@link_cont_name} netns #{@init_pid}`
     write_pid
@@ -85,11 +87,11 @@ class ContainerManager
 
   def wait_for_child
 
-    puts "CONTINST: Waiting for child unshare ..."
+    logger.debug "CONTINST: Waiting for child unshare ..."
     pipe = open(@in_pipe, "r")
     l = pipe.gets
     pipe.close
-    puts "In Line received: #{l}"
+    logger.debug "In Line received: #{l}"
   end
 
   def child_ready
@@ -124,13 +126,13 @@ class ContainerManager
   end
 
   def send(cmd)
-    puts "opening socket to host #{@container_ip}:#{@command_port} .."
+    logger.debug "opening socket to host #{@container_ip}:#{@command_port} .."
     client = TCPSocket.open(@container_ip, @command_port)
-    puts "sending command..."
+    logger.debug "sending command..."
     client.send(cmd, 0)
-    puts "waiting for response ..."
+    logger.debug "waiting for response ..."
     answer = client.gets(nil)
-    puts answer
+    logger.debug answer
     client.close
   end
 

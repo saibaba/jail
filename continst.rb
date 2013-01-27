@@ -1,13 +1,15 @@
 require 'fileutils'
 require 'socket'
+require './logging'
 
 class ContainerInstance
+  include Logging
 
   attr_accessor :host_ip, :container_ip, :tenant_id, :base, :command_port
   
   def initialize
 
-    puts "ContainerInstance, my pid = #{Process.pid}"
+    logger.debug "ContainerInstance, my pid = #{Process.pid}"
 
     @base = "/home/sai/platform/tenants"
     @command_port = 5555
@@ -35,14 +37,14 @@ class ContainerInstance
 
   def init
 
-    puts "LCONTINST: ifconfig #{@link_cont_name} #{@container_ip} up"
+    logger.debug "LCONTINST: ifconfig #{@link_cont_name} #{@container_ip} up"
     `ifconfig #{@link_cont_name} #{@container_ip} up`
-    puts "LCONTINST: route..."
+    logger.debug "LCONTINST: route..."
     `route add default gw #{@host_ip} #{@link_cont_name}`
-    puts "LCONTINST: lo..."
+    logger.debug "LCONTINST: lo..."
     `ifconfig lo up`
 
-    puts "LCONTINST: Launching listener..."
+    logger.debug "LCONTINST: Launching listener..."
 
     @listener_pid = Process.fork {
       $0 = "ruby continst-#{@tenant_id}:listener"
@@ -50,30 +52,30 @@ class ContainerInstance
       listener_main(@command_port)
     }
 
-    puts 'starting sshd'
+    logger.debug 'starting sshd'
     @sshd_pid = Process.fork {
-      puts 'starting sshd instance'
+      logger.debug 'starting sshd instance'
       `/usr/sbin/sshd &`
     }
 
   end
 
   def term
-    puts "kill #{@listener_pid}"
+    logger.debug "kill #{@listener_pid}"
     `kill #{@listener_pid}`
-    puts "ifconfig #{@link_cont_name} #{@container_ip} down"
+    logger.debug "ifconfig #{@link_cont_name} #{@container_ip} down"
     `ifconfig #{@link_cont_name} #{@container_ip} down`
-    puts "ip link del #{@link_cont_name}"
+    logger.debug "ip link del #{@link_cont_name}"
     `ip link del #{@link_cont_name}`
   end
 
   def wait_for_ok
 
-    puts "CONTINST: Waiting for ok..."
+    logger.debug "CONTINST: Waiting for ok..."
     pipe = open(@pipe, "r")
     l = pipe.gets
     pipe.close
-    puts "Line received: #{l}"
+    logger.debug "Line received: #{l}"
   end
 
   def wait_for_shutdown
@@ -81,11 +83,11 @@ class ContainerInstance
     pipe = open(@pipe, "r")
     l = pipe.gets 
     pipe.close
-    puts "Got termination request: #{l}"
+    logger.debug "Got termination request: #{l}"
   end
 
   def run
-    puts "An instance of container being launched for tenant: #{@tenant_id}"
+    logger.debug "An instance of container being launched for tenant: #{@tenant_id}"
     wait_for_ok
     init
     wait_for_shutdown
@@ -100,7 +102,7 @@ end
 
 def inst_main(tenant_id)
 
-  puts "Instance: #{tenant_id}, PID of init from inside: #{Process.ppid}"
+  logger.debug "Instance: #{tenant_id}, PID of init from inside: #{Process.ppid}"
 
   conf = load_conf(tenant_id)
 
@@ -112,7 +114,7 @@ def inst_main(tenant_id)
     c.command_port = conf['command_port'].to_i
   end
 
-  puts "Instance for tenant #{tenant_id} configured, running it.."
+  logger.debug "Instance for tenant #{tenant_id} configured, running it.."
 
   inst.run
 
