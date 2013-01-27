@@ -1,6 +1,7 @@
 require 'fileutils'
 require 'socket'
 require './logging'
+require './conf'
 
 class ContainerInstance
   include Logging
@@ -19,6 +20,7 @@ class ContainerInstance
     @pipe="#{@tenant_home}/comm_pipe.fifo"
     @link_host_name="v0-tenant-#{@tenant_id}"
     @link_cont_name="v1-tenant-#{@tenant_id}"
+    @etc =  "#{@tenant_home}/etc"
   end
 
   def runcmd(cmd)
@@ -55,7 +57,7 @@ class ContainerInstance
     logger.debug 'starting sshd'
     @sshd_pid = Process.fork {
       logger.debug 'starting sshd instance'
-      `/usr/sbin/sshd &`
+      `/usr/sbin/sshd -f #{@etc}/ssh/sshd_config &`
     }
 
   end
@@ -94,32 +96,4 @@ class ContainerInstance
     term
   end
 
-end
-
-def load_conf(tenant_id)
-  return Hash[*File.read("/home/sai/platform/tenants/#{tenant_id}/etc/container/container.conf").split(/[= \n]+/)]
-end
-
-def inst_main(tenant_id)
-
-  logger.debug "Instance: #{tenant_id}, PID of init from inside: #{Process.ppid}"
-
-  conf = load_conf(tenant_id)
-
-  inst = ContainerInstance.new do |c|
-    c.host_ip = conf['host_ip']
-    c.container_ip = conf['container_ip']
-    c.tenant_id = conf['tenant_id'].to_i
-    c.base = conf['base']
-    c.command_port = conf['command_port'].to_i
-  end
-
-  logger.debug "Instance for tenant #{tenant_id} configured, running it.."
-
-  inst.run
-
-end
-
-if ARGV.length == 1
-  inst_main(ARGV[0].to_i)
 end

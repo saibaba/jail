@@ -1,0 +1,32 @@
+policy_module(openpaas, 0.0.1);
+
+require {
+  # existing type
+  type ld_so_cache_t;
+  type ld_so_t;
+  type lib_t;
+  type unconfined_t;
+  type init_t;
+  type null_device_t;
+  type root_t;
+  type user_devpts_t;
+  type usr_t;
+  #transition permission on existing (obect) class, "process"
+  class process { getattr signal siginh rlimitinh transition sigchld noatsecure };
+
+  class file { rename append write unlink relabelfrom entrypoint getattr execute read relabelto open };
+  type fs_t;
+  class chr_file { read write open getattr append };
+  class dir { search getattr };
+  class fd { use };
+  class lnk_file { read };
+  
+  type user_home_t;
+}
+
+
+type openpaas_t;
+role openpaas_r types openpaas_t;
+
+#user openpaas_u roles openpaas_r;
+gen_user(openpaas_u, user, openpaas_r, s0, s0)

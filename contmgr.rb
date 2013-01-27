@@ -3,6 +3,7 @@ require 'socket'
 
 require './continst'
 require './logging'
+require './conf'
 
 CLONE_NO=56
 UNSHARE_NO = 272
@@ -19,12 +20,25 @@ class ContainerManager
   
   def initialize
     yield self if block_given?
-    @tenant_home = "/home/sai/platform/tenants/#{@tenant_id}"
+    @tenant_home = "#{@base}/#{@tenant_id}"
     @pipe="#{@tenant_home}/comm_pipe.fifo"
     @in_pipe="#{@tenant_home}/comm_pipe_in.fifo"
     @link_host_name="v0-tenant-#{@tenant_id}"
     @link_cont_name="v1-tenant-#{@tenant_id}"
     @pid_file = "#{@tenant_home}/var/run/init.pid"
+    @etc = "#{@tenant_home}/etc"
+  end
+
+  def create_instance
+    inst = ContainerInstance.new do |c|
+      c.host_ip = @host_ip
+      c.container_ip = @container_ip
+      c.tenant_id = @tenant_id
+      c.base = @base
+      c.command_port = @command_port
+    end
+
+    return inst
   end
 
   def init_pid
@@ -66,16 +80,16 @@ class ContainerManager
       initrc_pid = Process.fork {
         $0 = "ruby container-#{@tenant_id}:init-runner"
         Process.setsid
-        require './continst'
-        inst_main(@tenant_id)
+        inst = create_instance
+        inst.run 
       }
-      logger.debug "Init waiting for init-runner to finish...."
+      logger.debug "Init waiting for init-runner to finish..."
       Process.waitpid(initrc_pid)
     }
 
     logger.debug "Waiting for unsharing by child..."
-    sleep 1 
-    wait_for_child
+    sleep 1
+    wait_for_child  # once child creates a new network namespace, move child side of veth to the child network namespace
 
     logger.debug "Moving link to init (with pid: #{@init_pid}) with below command ..."
     logger.debug "ip link set #{@link_cont_name} netns #{@init_pid}"
@@ -143,11 +157,6 @@ class ContainerManager
 
 end
 
-def load_conf(tenant_id)
-  return Hash[*File.read("/home/sai/platform/tenants/#{tenant_id}/etc/container/container.conf").split(/[= \n]+/)]
-end
-
-
 if ARGV.length != 2
   puts "Missing argument: usage ruby contmgr.rb tenant_id cmd"
   exit
@@ -158,13 +167,13 @@ cmd = ARGV[1]
 
 puts "Tenant: <#{tenant_id}> Command: <#{cmd}>, my pid = #{Process.pid}"
 
-cfg = load_conf(tenant_id)
+cfg = load_conf(Config.instance['base'], tenant_id)
 
 container1 = ContainerManager.new do |c|
   c.host_ip = cfg['host_ip']
   c.container_ip = cfg['container_ip']
-  c.tenant_id = tenant_id.to_i
-  c.base = "/home/sai/platform/tenants"
+  c.tenant_id = tenant_id
+  c.base = cfg['base']
   c.command_port = cfg['command_port'].to_i
 end
 
